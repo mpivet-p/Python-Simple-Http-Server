@@ -17,5 +17,6 @@ class HttpResponse:
     def __repr__(self) -> str:
         return f"HTTP/1.1 {self._status_code} {self._message}\r\n{self._get_headers()}\r\n{self._body}"
 
+    # If content is not None, need to add Content-Length header
     def to_bytes(self) -> bytes:
         return bytes(f"HTTP/1.1 {self._status_code} {self._message}\r\n{self._get_headers()}\r\n{self._body}", "utf-8")

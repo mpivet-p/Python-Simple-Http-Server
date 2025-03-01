@@ -5,6 +5,7 @@ import sys
 from HttpRequest import HttpRequest
 from HttpResponse import HttpResponse
 
+
 def accept_wrapper(sock: socket.socket, sel: selectors.DefaultSelector) -> None:
     conn, addr = sock.accept()
     print(f'Accepted connection from {addr}')
@@ -15,50 +16,73 @@ def accept_wrapper(sock: socket.socket, sel: selectors.DefaultSelector) -> None:
     sel.register(conn, events, data=data)
 
 
+def handle_http_request(data: types.SimpleNamespace) -> None:
+    if not HttpRequest.is_version_supported(data.inb):
+        response = HttpResponse(505, "HTTP Version Not Supported", {}, "505 HTTP Version Not Supported")
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+        return
+    
+    request = HttpRequest(data.inb)
+    # Temporary
+    if request.path == "/":
+        response = HttpResponse(200, "OK", {}, "Hi")
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+        return
+    elif request.method == "GET":
+        response = HttpResponse(404, "Page Not Found")
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+        return
+
+
+def handle_https_request(data: types.SimpleNamespace) -> None:
+    response = HttpResponse(
+        400,
+        "Bad Request",
+        {
+            "Content-Type": "text/plain",
+            "Content-Length": "35",
+            "Connection": "close"
+        },
+        "This server does not support HTTPS."
+        )
+    data.outb = response.to_bytes()
+    data.send_and_close = True
+
+
 def service_connection(
         sel: selectors.DefaultSelector, key: selectors.SelectorKey, mask: int
 ) -> None:
     sock: socket.socket = key.fileobj
     data = key.data
 
-    # print(f'mask: {mask}')
-    # Ready to receive
     if mask & selectors.EVENT_READ:
         recv_data = sock.recv(2048)
         if recv_data:
-
-            line = recv_data.split(b"\r\n")
-            print(line[0] if type(line) == list else "Not clear HTTP")
-
-            if HttpRequest.is_tls_handshake(recv_data):
-                print("TLS Handshake!")
-                response = HttpResponse(
-                    400,
-                    "Bad Request",
-                    {
-                        "Content-Type": "text/plain",
-                        "Content-Length": "35",
-                        "Connection": "close"
-                    },
-                    "This server does not support HTTPS."
-                    )
-                data.outb = response.to_bytes()
-                data.send_and_close = True
-            elif HttpRequest.is_request_supported(recv_data):
-                request = HttpRequest(recv_data)
+            data.inb += recv_data
+            if HttpRequest.is_tls_handshake(data.inb):
+                handle_https_request(data)
+            elif HttpRequest.is_http_request_complete(data.inb):
+                handle_http_request(data)
             else:
-                response = HttpResponse(505, "HTTP Version Not Supported", {}, "")
-                data.outb = response.to_bytes()
-                data.send_and_close = True
-        # else:
-        #     print(f'[]Closing connection with {data.addr}')
-        #     sel.unregister(sock)
-        #     sock.close()
-    # Ready to write
+                print("Unknown or incomplete request.")
+
+            # elif HttpRequest.is_request_supported(recv_data):
+            #     request = HttpRequest(recv_data)
+            # else:
+            #     response = HttpResponse(505, "HTTP Version Not Supported", {}, "505 HTTP Version Not Supported")
+            #     data.outb = response.to_bytes()
+            #     data.send_and_close = True
+        else:
+            print(f'[]Closing connection with {data.addr}')
+            sel.unregister(sock)
+            sock.close()
     if mask & selectors.EVENT_WRITE:
         if data.outb:
             sent = sock.send(data.outb)
-            print(data.outb[:sent])
+            # print(data.outb[:sent])
             data.outb = data.outb[sent:]
         if not data.outb and data.send_and_close:
             print(f"Closing connection with {data.addr}")

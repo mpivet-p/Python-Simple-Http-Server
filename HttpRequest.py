@@ -21,6 +21,10 @@ class HttpRequest:
         return headers
     
     @property
+    def path(self) -> str:
+        return self._path
+
+    @property
     def headers(self) -> dict:
         return self._headers
     
@@ -33,17 +37,22 @@ class HttpRequest:
         return self._method
 
     @staticmethod
-    def is_request_supported(data: bytes) -> bool:
+    def is_version_supported(data: bytes) -> bool:
         try:
-            print(data)
             str_content = data.decode()
             request_line = str_content.split("\r\n", 1)[0]
-            method, _, http_vers = request_line.split(" ")
-            return http_vers in SUPPORTED_HTTP and method in SUPPORTED_METHODS
+            http_vers = request_line.split(" ")[2]
+
+            return http_vers in SUPPORTED_HTTP
         except AttributeError:
             return False
         except UnicodeDecodeError:
             return False
+
+    @staticmethod
+    def is_http_request_complete(data: bytes) -> bool:
+        header_end: int = data.find(b"\r\n\r\n")
+        return header_end != -1
         
     @staticmethod
     def is_tls_handshake(data: bytes) -> bool:
