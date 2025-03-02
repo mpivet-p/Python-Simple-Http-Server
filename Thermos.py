@@ -39,12 +39,6 @@ class Thermos:
         def decorator(func: Callable) -> Callable:
             print(f"I am the decorator {func=}, {route=}, {methods=}")
             self._add_route(route, methods, func)
-
-            def wrapper(*args, **kwargs):
-                print(f"I am the wrapper {args=}, {kwargs=}")
-                func(*args, **kwargs)
-
-            return wrapper
         return decorator
 
 
@@ -91,7 +85,7 @@ class Thermos:
             if recv_data:
                 data.inb += recv_data
                 if HttpRequest.is_tls_handshake(data.inb):
-                    self._handle_https_request(data)
+                    self._reject_https_request(data)
                 elif HttpRequest.is_http_request_complete(data.inb):
                     self._handle_http_request(data)
                 else:
@@ -109,6 +103,30 @@ class Thermos:
                 self._selector.unregister(sock)
                 sock.close()
 
+    def _bad_request_handler(self, data: types.SimpleNamespace) -> None:
+        response = HttpResponse(400, "Bad Request", {}, "400 Bad Request")
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+
+    def _not_found_handler(self, data: types.SimpleNamespace) -> None:
+        response = HttpResponse(404, "Page Not Found", {}, "404 Page Not Found")
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+
+    def _handle_route(self, request: HttpRequest, data: types.SimpleNamespace) -> None:
+        func = self._routes[request.method][request.path]
+        ret = func()
+
+        if type(ret) == str:
+            response = HttpResponse(200, "OK", {}, ret)
+        elif type(ret) == HttpResponse:
+            response = ret
+        else:
+            response = HttpResponse(500, "Internal Server Error")
+
+        data.outb = response.to_bytes()
+        data.send_and_close = True
+
 
     def _handle_http_request(self, data: types.SimpleNamespace) -> None:
         if not HttpRequest.is_version_supported(data.inb):
@@ -118,25 +136,15 @@ class Thermos:
             return
         
         request = HttpRequest(data.inb)
-        # Temporary
-        if request.path == "/":
-            response = HttpResponse(200, "OK", {}, "Hello World!")
-            data.outb = response.to_bytes()
-            data.send_and_close = True
-            return
-        elif request.method == "GET":
-            response = HttpResponse(404, "Page Not Found", {}, "404 Page Not Found")
-            data.outb = response.to_bytes()
-            data.send_and_close = True
-            return
-        else:
-            response = HttpResponse(400, "Bad Request", {}, "400 Bad Request")
-            data.outb = response.to_bytes()
-            data.send_and_close = True
-            return
 
+        if not request.method in self._routes:
+            return self._bad_request_handler(data)
+        if not request.path in self._routes[request.method]:
+            return self._not_found_handler(data)
+        
+        self._handle_route(request, data)
 
-    def _handle_https_request(self, data: types.SimpleNamespace) -> None:
+    def _reject_https_request(self, data: types.SimpleNamespace) -> None:
         response = HttpResponse(
             400,
             "Bad Request",
