@@ -1,8 +1,8 @@
 import socket
 import selectors
 import types
-from HttpRequest import HttpRequest
-from HttpResponse import HttpResponse
+from .HttpRequest import HttpRequest
+from .HttpResponse import HttpResponse
 from _collections_abc import Callable
 
 class Thermos:
@@ -136,6 +136,8 @@ class Thermos:
             return
         
         request = HttpRequest(data.inb)
+        print(request)
+        print(f"{request.params=}")
 
         if not request.method in self._routes:
             return self._bad_request_handler(data)
