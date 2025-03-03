@@ -1,6 +1,3 @@
-SUPPORTED_HTTP = ["HTTP/1.0", "HTTP/1.1"]
-SUPPORTED_METHODS = ["GET"]
-
 class HttpRequest:
 
     def __init__(self, request_content: bytes):
@@ -38,7 +35,7 @@ class HttpRequest:
     
     def __repr__(self):
         headers = "\n".join((f"{key}: {self._headers[key]}" for key in self._headers))
-        return f"{self._start_line}\n{headers}\n\n{self.body}"
+        return f"{self._start_line}\n{headers}\n{self.body}"
     
     @property
     def params(self) -> dict:
@@ -59,25 +56,3 @@ class HttpRequest:
     @property
     def method(self) -> str:
         return self._method
-
-    @staticmethod
-    def is_version_supported(data: bytes) -> bool:
-        try:
-            str_content = data.decode()
-            request_line = str_content.split("\r\n", 1)[0]
-            http_vers = request_line.split(" ")[2]
-
-            return http_vers in SUPPORTED_HTTP
-        except AttributeError:
-            return False
-        except UnicodeDecodeError:
-            return False
-
-    @staticmethod
-    def is_http_request_complete(data: bytes) -> bool:
-        header_end: int = data.find(b"\r\n\r\n")
-        return header_end != -1
-        
-    @staticmethod
-    def is_tls_handshake(data: bytes) -> bool:
-        return data[0] == 22

@@ -84,9 +84,10 @@ class Thermos:
             recv_data = sock.recv(2048)
             if recv_data:
                 data.inb += recv_data
-                if HttpRequest.is_tls_handshake(data.inb):
+                print(data.inb)
+                if Thermos.is_tls_handshake(data.inb):
                     self._reject_https_request(data)
-                elif HttpRequest.is_http_request_complete(data.inb):
+                elif Thermos.is_http_request_complete(data.inb):
                     self._handle_http_request(data)
                 else:
                     print("Unknown or incomplete request.")
@@ -129,7 +130,7 @@ class Thermos:
 
 
     def _handle_http_request(self, data: types.SimpleNamespace) -> None:
-        if not HttpRequest.is_version_supported(data.inb):
+        if not Thermos.is_version_supported(data.inb):
             response = HttpResponse(505, "HTTP Version Not Supported", {}, "505 HTTP Version Not Supported")
             data.outb = response.to_bytes()
             data.send_and_close = True
@@ -159,3 +160,25 @@ class Thermos:
             )
         data.outb = response.to_bytes()
         data.send_and_close = True
+
+    @classmethod
+    def is_version_supported(cls, data: bytes) -> bool:
+        try:
+            str_content = data.decode()
+            request_line = str_content.split("\r\n", 1)[0]
+            http_vers = request_line.split(" ")[2]
+
+            return http_vers in ["HTTP/1.1"]
+        except AttributeError:
+            return False
+        except UnicodeDecodeError:
+            return False
+
+    @classmethod
+    def is_http_request_complete(cls, data: bytes) -> bool:
+        header_end: int = data.find(b"\r\n\r\n")
+        return header_end != -1
+
+    @classmethod   
+    def is_tls_handshake(cls, data: bytes) -> bool:
+        return data[0] == 22
